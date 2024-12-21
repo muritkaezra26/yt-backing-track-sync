@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Guitar Backing Track Sync</title>
+        <style>
+            body {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin: 0;
+                padding: 20px;
+                box-sizing: border-box;
+                font-family: Arial, sans-serif;
+                background-color: #f0f0f0;
+            }
+            .section {
+                background-color: white;
+                border-radius: 8px;
+                padding: 20px;
+                margin-bottom: 20px;
+                width: 100%;
+                max-width: 1000px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            #video-url, #bpm-input, #total-bars-input {
+                width: 200px;
+                padding: 5px;
+                margin-right: 10px;
+            }
+            button {
+                padding: 5px 10px;
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            #container {
+                display: flex;
+                gap: 20px;
+                align-items: flex-start;
+                margin-bottom: 20px;
+            }
+            #image-thumbnails {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 20px;
+                width: 100%;
+                max-width: 1000px;
+            }
+            .thumbnail-container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                width: 120px;
+            }
+            .thumbnail {
+                width: 100px;
+                height: 100px;
+                object-fit: contain;
+                border: 1px solid #ccc;
+                cursor: pointer;
+                margin-bottom: 10px;
+            }
+            .selected {
+                border: 3px solid blue;
+            }
+            #chord-display {
+                width: 360px;
+                height: 360px;
+                border: 1px solid #ccc;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                overflow: auto;
+                background-color: white;
+            }
+            #chord-display img {
+                max-width: 100%;
+                max-height: 100%;
+                width: auto;
+                height: auto;
+            }
+            .collapsible {
+                background-color: #777;
+                color: white;
+                cursor: pointer;
+                padding: 18px;
+                width: 100%;
+                border: none;
+                text-align: left;
+                outline: none;
+                font-size: 15px;
+            }
+            .active, .collapsible:hover {
+                background-color: #555;
+            }
+            .content {
+                padding: 0 18px;
+                display: none;
+                overflow: hidden;
+                background-color: #f1f1f1;
+            }
+            .instruction {
+                margin-bottom: 20px;
+                font-style: italic;
+            }
+        </style>
+    </head>    
+<body>
+    <div class="instruction">
+        <h2>Sync chord and target note images with youtube backing tracks</h2>
+    </div>
+
+    <div class="section">
+        <button class="collapsible">▼ Save and load existing configuration</button>
+        <div class="content">
+            <h2>Save Parameters</h2>
+            <button id="save-params">Save Parameters</button>
+
+            <h2>Load Parameter File</h2>
+            <input type="file" id="load-params" accept=".json">
+            <button id="load-params-btn">Load Parameters</button>
+        </div>
+    </div>
+    
+    <div class="section">
+        <button class="collapsible">▼ Start new configuration</button>
+        <div class="content">
+            <h2>How to create a new configuration:</h2>
+            <ol>
+                <li>Paste YouTube video URL and click 'Load Video'.</li>
+                <li>Find the point in the video where the backing track starts (most videos will have a short count-in). Hit play on the video and click 'Set Start Time' when the actual backing track music starts playing.</li>
+                <li>If you know the BPM for the video, enter it. Otherwise, you can use the 'Tap BPM' button.</li>
+                <li>Set the number of bars, and click 'Set BPM and Bars'. Note: If the chord images and backing track are drifting in time, you may need to adjust your BPM.</li>
+                <li>Upload chord images.</li>
+                <li>Select which images go with each bar and beat. For example:
+                    <ul>
+                        <li>"1,2" would show the same image on bars 1 and 2.</li>
+                        <li>"1, 2:3" would show the same image on bar 1, and then again on beat 3 of bar 2.</li>
+                    </ul>
+                </li>
+                <li>Save your configuration when you have everything perfect!</li>
+            </ol>
+            <h2>Video Input</h2>
+            <input type="text" id="video-url" placeholder="Paste YouTube video URL here">
+            <button id="load-video">Load Video</button>
+
+            <h2>Sync Controls</h2>
+            <button id="set-start-time">Set Start Time</button>
+            <span id="start-time-display">Start Time: 0s</span>
+
+            <h2>BPM and Bars</h2>
+            <input type="number" id="bpm-input" placeholder="BPM" min="1">
+            <button id="tap-bpm">Tap BPM</button>
+            <input type="number" id="total-bars-input" placeholder="Total Bars" min="1">
+            <button id="set-bpm">Set BPM and Total Bars</button>
+
+            <h2>Image Upload</h2>
+            <input type="file" id="image-input" accept="image/*" multiple>
+            <button id="save-params2">Save Parameters</button>
+
+            <div id="image-thumbnails" class="section"></div>
+            <div id="chord-assignments" class="section"></div>
+        </div>
+    </div>
+
+    <div id="container" class="section">
+        <div id="player"></div>
+        <div id="chord-display"></div>
+    </div>
+    <script>
+        var coll = document.getElementsByClassName("collapsible");
+        var i;
+
+        for (i = 0; i < coll.length; i++) {
+            coll[i].addEventListener("click", function() {
+                this.classList.toggle("active");
+                var content = this.nextElementSibling;
+                if (content.style.display === "block") {
+                    content.style.display = "none";
+                    this.textContent = "▼ " + this.textContent.slice(2);
+                } else {
+                    content.style.display = "block";
+                    this.textContent = "▲ " + this.textContent.slice(2);
+                }
+            });
+        }
+    </script>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        let player;
+        let currentChord = -1;
+        let chords = [];
+        let startTime = 0;
+        let bpm = 120;
+        let totalBars = 0;
+        let images = [];
+        let selectedImageIndex = -1;
+        let lastTapTime = 0;
+        let tapCount = 0;
+        let tapTimes = [];
+
+        function onYouTubeIframeAPIReady() {
+            document.getElementById('load-video').addEventListener('click', loadVideo);
+            document.getElementById('set-start-time').addEventListener('click', setStartTime);
+            document.getElementById('set-bpm').addEventListener('click', setBPM);
+            document.getElementById('image-input').addEventListener('change', handleImageUpload);
+            document.getElementById('tap-bpm').addEventListener('click', tapBPM);
+            document.getElementById('save-params').addEventListener('click', saveParameters);
+            document.getElementById('save-params2').addEventListener('click', saveParameters);
+            document.getElementById('load-params-btn').addEventListener('click', loadParameters);
+        }
+
+        function loadVideo() {
+            const videoUrl = document.getElementById('video-url').value;
+            const videoId = extractVideoId(videoUrl);
+            
+            if (videoId) {
+                if (player) {
+                    player.destroy();
+                }
+                
+                player = new YT.Player('player', {
+                    height: '360',
+                    width: '640',
+                    videoId: videoId,
+                    events: {
+                        'onReady': onPlayerReady,
+                        'onStateChange': onPlayerStateChange
+                    }
+                });
+            } else {
+                alert('Invalid YouTube URL');
+            }
+        }
+
+        function extractVideoId(url) {
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        }
+
+        function onPlayerReady(event) {
+            setInterval(checkTime, 100);
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data == YT.PlayerState.PLAYING) {
+                setInterval(checkTime, 100);
+            }
+        }
+
+        function checkTime() {
+            if (!player || totalBars === 0) return;
+            const currentTime = player.getCurrentTime() - startTime;
+            if (currentTime < 0) return;
+            
+            const beatsPerBar = 4;
+            const secondsPerBeat = 60 / bpm;
+            const secondsPerBar = secondsPerBeat * beatsPerBar;
+            const totalSeconds = totalBars * secondsPerBar;
+            
+            const currentBarFloat = (currentTime / secondsPerBar) % totalBars;
+            const currentBar = Math.floor(currentBarFloat) + 1;
+            const currentBeat = Math.floor((currentBarFloat % 1) * beatsPerBar) + 1;
+
+            for (let i = 0; i < chords.length; i++) {
+                if (currentBar > chords[i].bar || (currentBar === chords[i].bar && currentBeat >= chords[i].beat)) {
+                    if (i === chords.length - 1 || currentBar < chords[i+1].bar || (currentBar === chords[i+1].bar && currentBeat < chords[i+1].beat)) {
+                        if (currentChord !== i) {
+                            currentChord = i;
+                            updateChordDisplay();
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        function updateChordDisplay() {
+            const chordDisplay = document.getElementById('chord-display');
+            chordDisplay.innerHTML = `<img src="${chords[currentChord].image}" alt="Chord Diagram">`;
+        }
+
+        function setStartTime() {
+            if (player && player.getPlayerState() === YT.PlayerState.PLAYING) {
+                startTime = player.getCurrentTime();
+                document.getElementById('start-time-display').textContent = `Start Time: ${startTime.toFixed(2)}s`;
+                console.log('New start time set:', startTime);
+            } else {
+                alert('Please start playing the video first');
+            }
+        }
+
+        function setBPM() {
+            const newBPM = parseInt(document.getElementById('bpm-input').value);
+            const newTotalBars = parseInt(document.getElementById('total-bars-input').value);
+            if (!isNaN(newBPM) && newBPM > 0 && !isNaN(newTotalBars) && newTotalBars > 0) {
+                bpm = newBPM;
+                totalBars = newTotalBars;
+                console.log('New BPM set:', bpm);
+                console.log('Total bars set:', totalBars);
+            } else {
+                alert('Please enter valid BPM and Total Bars');
+            }
+        }
+
+        function handleImageUpload(event) {
+            const files = event.target.files;
+            for (let file of files) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    images.push(e.target.result);
+                    addThumbnail(e.target.result, images.length - 1);
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function addThumbnail(src, index) {
+            const thumbnails = document.getElementById('image-thumbnails');
+            const container = document.createElement('div');
+            container.className = 'thumbnail-container';
+            
+            const img = document.createElement('img');
+            img.src = src;
+            img.className = 'thumbnail';
+            img.onclick = () => selectImage(index);
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Bar:Beat';
+            
+            const button = document.createElement('button');
+            button.textContent = 'Add/Update';
+            button.onclick = () => addUpdateChord(index, input.value);
+            
+            container.appendChild(img);
+            container.appendChild(input);
+            container.appendChild(button);
+            thumbnails.appendChild(container);
+        }
+
+        function selectImage(index) {
+            selectedImageIndex = index;
+            document.querySelectorAll('.thumbnail').forEach((thumb, i) => {
+                thumb.classList.toggle('selected', i === index);
+            });
+        }
+
+        function addUpdateChord(imageIndex, barBeatString) {
+            const barEntries = barBeatString.split(',').map(entry => entry.trim());
+            
+            barEntries.forEach(entry => {
+                const [barNumber, beat] = entry.split(':').map(num => parseInt(num.trim()));
+                
+                if (isNaN(barNumber) || barNumber <= 0 || (beat !== undefined && (isNaN(beat) || beat < 1 || beat > 4))) {
+                    alert('Please enter valid bar number(s) and beat(s)');
+                    return;
+                }
+
+                const existingChordIndex = chords.findIndex(chord => chord.bar === barNumber && chord.beat === (beat || 1));
+                if (existingChordIndex !== -1) {
+                    chords[existingChordIndex].image = images[imageIndex];
+                } else {
+                    chords.push({ bar: barNumber, beat: beat || 1, image: images[imageIndex] });
+                }
+            });
+
+            chords.sort((a, b) => a.bar - b.bar || a.beat - b.beat);
+            console.log('Updated chords:', chords);
+            displayChordAssignments();
+        }
+
+        function displayChordAssignments() {
+            const assignmentsDiv = document.getElementById('chord-assignments');
+            const assignments = chords.map(chord => {
+                const imageIndex = images.indexOf(chord.image);
+                return `Bar ${chord.bar}${chord.beat > 1 ? `, Beat ${chord.beat}` : ''}: Image ${imageIndex + 1}`;
+            }).join('<br>');
+            assignmentsDiv.innerHTML = '<h3>Chord Assignments:</h3>' + assignments;
+        }
+
+        function tapBPM() {
+            const currentTime = new Date().getTime();
+            if (lastTapTime !== 0) {
+                const timeDiff = currentTime - lastTapTime;
+                tapTimes.push(timeDiff);
+                
+                if (tapTimes.length > 4) {
+                    tapTimes.shift();
+                }
+                
+                if (tapTimes.length >= 2) {
+                    const averageTimeDiff = tapTimes.reduce((a, b) => a + b) / tapTimes.length;
+                    const calculatedBPM = Math.round(60000 / averageTimeDiff);
+                    document.getElementById('bpm-input').value = calculatedBPM;
+                }
+            }
+            lastTapTime = currentTime;
+            tapCount++;
+            
+            if (tapCount >= 8) {
+                lastTapTime = 0;
+                tapCount = 0;
+                tapTimes = [];
+            }
+        }
+
+        function saveParameters() {
+            const params = {
+                videoUrl: document.getElementById('video-url').value,
+                bpm: bpm,
+                totalBars: totalBars,
+                startTime: startTime,
+                chords: chords,
+                images: images
+            };
+            const blob = new Blob([JSON.stringify(params)], {type: 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'guitar_backing_track_params.json';
+            a.click();
+        }
+
+        function loadParameters() {
+            const file = document.getElementById('load-params').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const params = JSON.parse(e.target.result);
+                    document.getElementById('video-url').value = params.videoUrl;
+                    document.getElementById('bpm-input').value = params.bpm;
+                    document.getElementById('total-bars-input').value = params.totalBars;
+                    bpm = params.bpm;
+                    totalBars = params.totalBars;
+                    startTime = params.startTime;
+                    chords = params.chords;
+                    images = params.images;
+                    document.getElementById('start-time-display').textContent = `Start Time: ${startTime.toFixed(2)}s`;
+                    
+                    // Clear existing thumbnails
+                    document.getElementById('image-thumbnails').innerHTML = '';
+                    
+                    // Recreate thumbnails
+                    images.forEach((image, index) => addThumbnail(image, index));
+                    
+                    displayChordAssignments();
+                    loadVideo();
+                };
+                reader.readAsText(file);
+            }
+        }
+    </script>
+</body>
+</html>
